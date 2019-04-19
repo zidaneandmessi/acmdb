@@ -1,0 +1,13 @@
+clean
+compile
+dist
+eclipse
+handin
+javadocs
+runsystest
+runtest
+systemtest
+test
+test-and-handin
+test-report
+testcompile
