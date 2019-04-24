@@ -27,7 +27,6 @@ public class BufferPool {
     public static final int DEFAULT_PAGES = 50;
     private int numPages;
     private int pageCnt;
-    private Page[] pageAr;
     private ConcurrentHashMap<PageId, Page> pageMap;
 
     /**
@@ -39,7 +38,6 @@ public class BufferPool {
         // some code goes here
         this.numPages = numPages;
         this.pageCnt = 0;
-        this.pageAr = new Page[numPages];
         pageMap = new ConcurrentHashMap<PageId, Page>();
     }
     
@@ -80,7 +78,6 @@ public class BufferPool {
             p = pageMap.get(pid);
         else if (perm.permLevel == 1) {
             p = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
-            pageAr[pageCnt++] = p;
             pageMap.put(pid, p);
         }
         else
