@@ -3,6 +3,7 @@ package simpledb;
 import java.io.*;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -22,11 +23,10 @@ public class BufferPool {
     private static int pageSize = PAGE_SIZE;
     
     /** Default number of pages passed to the constructor. This is used by
-    other classes. BufferPool should use the numPages argument to the
+    other classes. BufferPool should use the numPages)argument to the
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
     private int numPages;
-    private int pageCnt;
     private ConcurrentHashMap<PageId, Page> pageMap;
 
     /**
@@ -37,12 +37,11 @@ public class BufferPool {
     public BufferPool(int numPages) {
         // some code goes here
         this.numPages = numPages;
-        this.pageCnt = 0;
         pageMap = new ConcurrentHashMap<PageId, Page>();
     }
     
     public static int getPageSize() {
-      return pageSize;
+        return pageSize;
     }
     
     // THIS FUNCTION SHOULD ONLY BE USED FOR TESTING!!
@@ -76,12 +75,12 @@ public class BufferPool {
         Page p = null;
         if (pageMap.containsKey(pid))
             p = pageMap.get(pid);
-        else if (perm.permLevel == 1) {
+        else {
             p = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
+            while (pageMap.size() >= numPages)
+                evictPage();
             pageMap.put(pid, p);
         }
-        else
-            throw new DbException("No permission to write!");
         return p;
     }
 
@@ -148,6 +147,15 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        DbFile f = Database.getCatalog().getDatabaseFile(tableId);
+        ArrayList<Page> pages = f.insertTuple(tid, t);
+        for (Page p : pages) {
+            p.markDirty(true, tid);
+            pageMap.remove(p.getId());
+            while (pageMap.size() >= numPages)
+                evictPage();
+            pageMap.put(p.getId(), p);
+        }
     }
 
     /**
@@ -167,6 +175,15 @@ public class BufferPool {
         throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        DbFile f = Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
+        ArrayList<Page> pages = f.deleteTuple(tid, t);
+        for (Page p : pages) {
+            p.markDirty(true, tid);
+            pageMap.remove(p.getId());
+            while (pageMap.size() >= numPages)
+                evictPage();
+            pageMap.put(p.getId(), p);
+        }
     }
 
     /**
@@ -177,7 +194,8 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
-
+        for (PageId pid : pageMap.keySet())
+            flushPage(pid);
     }
 
     /** Remove the specific page id from the buffer pool.
@@ -191,6 +209,12 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
+        try {
+            flushPage(pid);
+        } catch(IOException e) {
+            e.printStackTrace();
+        }
+        pageMap.remove(pid);
     }
 
     /**
@@ -200,6 +224,15 @@ public class BufferPool {
     private synchronized  void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+        DbFile f = Database.getCatalog().getDatabaseFile(pid.getTableId());
+        Page p = pageMap.get(pid);
+        if (p == null || p.isDirty() == null) return;
+        try {
+            f.writePage(p);
+            p.markDirty(false, null);
+        } catch(IOException e) {
+            e.printStackTrace();
+        }
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -216,6 +249,13 @@ public class BufferPool {
     private synchronized  void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
+        java.util.Random rand = new java.util.Random();
+        int x = rand.nextInt(pageMap.size());
+        java.util.Iterator<ConcurrentHashMap.Entry<PageId, Page>> it = pageMap.entrySet().iterator();
+        ConcurrentHashMap.Entry<PageId, Page> e = it.next();
+        for (int i = 0; i < x ; i++)
+            e = it.next();
+        discardPage(e.getKey());
     }
 
 }

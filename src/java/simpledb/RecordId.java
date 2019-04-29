@@ -68,7 +68,7 @@ public class RecordId implements Serializable {
     public int hashCode() {
         // some code goes here
         int t = pageId.hashCode();
-        return Integer.parseInt(("" + t) + tupleNo);
+        return (int)(Long.parseLong(("" + t) + tupleNo));
     }
 
 }
