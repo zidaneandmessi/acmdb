@@ -23,11 +23,69 @@ public class BufferPool {
     private static int pageSize = PAGE_SIZE;
     
     /** Default number of pages passed to the constructor. This is used by
-    other classes. BufferPool should use the numPages)argument to the
+    other classes. BufferPool should use the numPages;argument to the
     constructor instead. */
     public static final int DEFAULT_PAGES = 50;
     private int numPages;
+    private int pageCnt;
     private ConcurrentHashMap<PageId, Page> pageMap;
+
+    public class LinkList {
+
+        public class Node {
+
+            public PageId pageId;
+            public Node next;
+
+            public Node(PageId pageId) {
+                this.pageId = pageId;
+            }
+        }
+        public Node head;
+        public Node tail;
+
+        public LinkList() {
+            head = tail = null;
+        }
+
+        public void add(PageId pageId) {
+            if (head == null) {
+                head = new Node(pageId);
+                tail = head;
+            }
+            else {
+                tail.next = new Node(pageId);
+                tail = tail.next;
+            }
+        }
+
+        public void del(PageId pageId) {
+            if (head == null) return;
+            if (head.pageId.equals(pageId)) {
+                head = head.next;
+                if (head == null)
+                    tail = null;
+                else if (head.next == null)
+                    tail = head;
+                return;
+            }
+            Node n;
+            for (n = head; n.next != null; n = n.next)
+                if (n.next.pageId.equals(pageId))
+                    break;
+            if (n == null)
+                return;
+            if (n.next == null)
+                tail = n;
+            else
+                n.next = n.next.next;
+        }
+        public void clear() {
+            head = tail = null;
+        }
+    }
+
+    public LinkList LRU;
 
     /**
      * Creates a BufferPool that caches up to numPages pages.
@@ -37,7 +95,9 @@ public class BufferPool {
     public BufferPool(int numPages) {
         // some code goes here
         this.numPages = numPages;
+        this.pageCnt = 0;
         pageMap = new ConcurrentHashMap<PageId, Page>();
+        LRU = new LinkList();
     }
     
     public static int getPageSize() {
@@ -77,9 +137,12 @@ public class BufferPool {
             p = pageMap.get(pid);
         else {
             p = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
-            while (pageMap.size() >= numPages)
+            while (pageCnt >= numPages)
                 evictPage();
             pageMap.put(pid, p);
+            pageCnt++;
+            LRU.del(pid);
+            LRU.add(pid);
         }
         return p;
     }
@@ -150,8 +213,14 @@ public class BufferPool {
         DbFile f = Database.getCatalog().getDatabaseFile(tableId);
         ArrayList<Page> pages = f.insertTuple(tid, t);
         for (Page p : pages) {
+            PageId pid = p.getId();
             p.markDirty(true, tid);
-            pageMap.remove(p.getId());
+            LRU.del(pid);
+            LRU.add(pid);
+            if (pageMap.containsKey(pid)) {
+                pageMap.remove(pid);
+                pageCnt--;
+            }
             while (pageMap.size() >= numPages)
                 evictPage();
             pageMap.put(p.getId(), p);
@@ -178,8 +247,14 @@ public class BufferPool {
         DbFile f = Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId());
         ArrayList<Page> pages = f.deleteTuple(tid, t);
         for (Page p : pages) {
+            PageId pid = p.getId();
             p.markDirty(true, tid);
-            pageMap.remove(p.getId());
+            LRU.del(pid);
+            LRU.add(pid);
+            if (pageMap.containsKey(pid)) {
+                pageMap.remove(pid);
+                pageCnt--;
+            }
             while (pageMap.size() >= numPages)
                 evictPage();
             pageMap.put(p.getId(), p);
@@ -209,12 +284,16 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
-        try {
-            flushPage(pid);
-        } catch(IOException e) {
-            e.printStackTrace();
+        LRU.del(pid);
+        if (pageMap.containsKey(pid)) {
+            try {
+                flushPage(pid);
+            } catch(IOException e) {
+                e.printStackTrace();
+            }
+            pageMap.remove(pid);
+            pageCnt--;
         }
-        pageMap.remove(pid);
     }
 
     /**
@@ -226,13 +305,16 @@ public class BufferPool {
         // not necessary for lab1
         DbFile f = Database.getCatalog().getDatabaseFile(pid.getTableId());
         Page p = pageMap.get(pid);
-        if (p == null || p.isDirty() == null) return;
+        if (p == null || p.isDirty() == null)
+            return;
         try {
             f.writePage(p);
             p.markDirty(false, null);
         } catch(IOException e) {
             e.printStackTrace();
         }
+        LRU.del(pid);
+        LRU.add(pid);
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -249,13 +331,9 @@ public class BufferPool {
     private synchronized  void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
-        java.util.Random rand = new java.util.Random();
-        int x = rand.nextInt(pageMap.size());
-        java.util.Iterator<ConcurrentHashMap.Entry<PageId, Page>> it = pageMap.entrySet().iterator();
-        ConcurrentHashMap.Entry<PageId, Page> e = it.next();
-        for (int i = 0; i < x ; i++)
-            e = it.next();
-        discardPage(e.getKey());
+        PageId pid = LRU.head.pageId;
+        LRU.del(pid);
+        discardPage(pid);
     }
 
 }
