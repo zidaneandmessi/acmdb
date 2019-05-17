@@ -87,6 +87,11 @@ public class HeapFile implements DbFile {
     public void writePage(Page page) throws IOException {
         // some code goes here
         // not necessary for lab1
+        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
+        RandomAccessFile f = new RandomAccessFile(file, "rw");
+        f.seek(page.getId().pageNumber() * BufferPool.getPageSize());
+        f.write(page.getPageData(), 0, BufferPool.getPageSize());
+        f.close();
     }
 
     /**
@@ -101,16 +106,35 @@ public class HeapFile implements DbFile {
     public ArrayList<Page> insertTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
-        return null;
         // not necessary for lab1
+        ArrayList<Page> dirtyPagesArr = new ArrayList<Page>();
+        for (int i = 0; i < numPages(); i++) {
+            HeapPage p = (HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), i), Permissions.READ_WRITE);
+            if (p.getNumEmptySlots() > 0) {
+                p.insertTuple(t);
+                p.markDirty(true, tid);
+                dirtyPagesArr.add(p);
+                return dirtyPagesArr;
+            }
+        }
+        HeapPage p = new HeapPage(new HeapPageId(getId(), numPages()), HeapPage.createEmptyPageData());
+        p.insertTuple(t);
+        writePage(p);
+        dirtyPagesArr.add(p);
+        return dirtyPagesArr;
     }
 
     // see DbFile.java for javadocs
     public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
             TransactionAbortedException {
         // some code goes here
-        return null;
         // not necessary for lab1
+        ArrayList<Page> dirtyPagesArr = new ArrayList<Page>();
+        HeapPage p = (HeapPage)Database.getBufferPool().getPage(tid, t.getRecordId().getPageId(), Permissions.READ_WRITE);
+        p.deleteTuple(t);
+        p.markDirty(true, tid);
+        dirtyPagesArr.add(p);
+        return dirtyPagesArr;
     }
 
     public class HeapFileIterator implements DbFileIterator {
@@ -137,26 +161,37 @@ public class HeapFile implements DbFile {
         }
 
         public boolean hasNext() {
-            return !(page == null || it == null || pageCnt >= numPages() && !it.hasNext());
+            if (page == null || it == null || pageCnt > numPages() || pageCnt == numPages() && !it.hasNext())
+                return false;
+            if (!it.hasNext()) {
+                try {
+                    for (int i = pageCnt; i < numPages(); i++)
+                        if (((HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), i), Permissions.READ_WRITE)).iterator().hasNext())
+                            return true;
+                } catch(TransactionAbortedException e) {
+                    e.printStackTrace();
+                } catch(DbException e) {
+                    e.printStackTrace();
+                }
+                return false;
+            }
+            return true;
         }
 
         public Tuple next() {
             if (!hasNext()) 
                 throw new NoSuchElementException();
-            Tuple t = it.next();
-            if (hasNext() && !it.hasNext()) {
-                while (!it.hasNext()) {
-                    try {
-                        page = (HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), pageCnt++), Permissions.READ_WRITE);
-                    } catch(TransactionAbortedException e) {
-                        e.printStackTrace();
-                    } catch(DbException e) {
-                        e.printStackTrace();
-                    }
-                    it = page.iterator();
+            while (hasNext() && !it.hasNext()) {
+                try {
+                    page = (HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), pageCnt++), Permissions.READ_WRITE);
+                } catch(TransactionAbortedException e) {
+                    e.printStackTrace();
+                } catch(DbException e) {
+                    e.printStackTrace();
                 }
+                it = page.iterator();
             }
-            return t;
+            return it.next();
         }
 
         public void rewind() {
