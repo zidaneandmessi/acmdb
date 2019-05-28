@@ -1,6 +1,7 @@
 package simpledb;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.swing.*;
 import javax.swing.tree.*;
@@ -111,7 +112,7 @@ public class JoinOptimizer {
             // HINT: You may need to use the variable "j" if you implemented
             // a join algorithm that's more complicated than a basic
             // nested-loops join.
-            return -1.0;
+            return cost1 + card1 * cost2 + card1 * card2;
         }
     }
 
@@ -155,9 +156,17 @@ public class JoinOptimizer {
             String field2PureName, int card1, int card2, boolean t1pkey,
             boolean t2pkey, Map<String, TableStats> stats,
             Map<String, Integer> tableAliasToId) {
-        int card = 1;
         // some code goes here
-        return card <= 0 ? 1 : card;
+        if (joinOp == Predicate.Op.EQUALS) {
+            if (t1pkey)
+                return card2;
+            else if (t2pkey)
+                return card1;
+            else
+                return Math.max(card1, card2);
+        }
+        else
+            return (int)(0.3 * card1 * card2);
     }
 
     /**
@@ -221,7 +230,30 @@ public class JoinOptimizer {
 
         // some code goes here
         //Replace the following
-        return joins;
+        PlanCache optjoin = new PlanCache();
+        int numJoin = joins.size();
+        for (int i = 1; i <= numJoin; i++) {
+            Set<Set<LogicalJoinNode>> subSets = enumerateSubsets(joins, i);
+            for (Set<LogicalJoinNode> s : subSets) {
+                Vector<LogicalJoinNode> bestPlan = null;
+                double bestCost = Double.MAX_VALUE;
+                int bestCard = 0;
+                for (LogicalJoinNode joinToRemove : s) {
+                    CostCard costCard = computeCostAndCardOfSubplan(stats, filterSelectivities, joinToRemove, s, bestCost, optjoin);
+                    if (costCard != null && costCard.cost < bestCost) {
+                        bestPlan = costCard.plan;
+                        bestCost = costCard.cost;
+                        bestCard = costCard.card;
+                    }
+                }
+                if (bestPlan != null)
+                    optjoin.addPlan(s, bestCost, bestCard, bestPlan);
+            }
+        }
+        Vector<LogicalJoinNode> order = optjoin.getOrder(new HashSet<LogicalJoinNode>(joins));
+        if (explain)
+            printJoins(order, optjoin, stats, filterSelectivities);
+        return order;
     }
 
     // ===================== Private Methods =================================

@@ -55,6 +55,9 @@ public class HashEquiJoin extends Operator {
         return td.getFieldName(p.getField2());
     }
     
+    private Tuple currentTuple2;
+    private Iterator<Tuple> listIt;
+    
     public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
@@ -76,6 +79,7 @@ public class HashEquiJoin extends Operator {
             }
         }
         child1.rewind();
+        listIt = null;
     }
 
     public void close() {
@@ -104,6 +108,7 @@ public class HashEquiJoin extends Operator {
             }
         }
         child1.rewind();
+        listIt = null;
     }
 
     /**
@@ -125,9 +130,6 @@ public class HashEquiJoin extends Operator {
      * @see JoinPredicate#filter
      */
     
-    private Tuple currentTuple2;
-    private Iterator<Tuple> listIt;
-    
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
         if (currentTuple2 == null) {
@@ -148,9 +150,7 @@ public class HashEquiJoin extends Operator {
         }
         if (listIt != null) {
             while (listIt.hasNext()) {
-                Tuple t1 = listIt.next();   
-                if (!p.filter(t1, currentTuple2))
-                    continue;
+                Tuple t1 = listIt.next();
                 TupleDesc td1 = t1.getTupleDesc(), td2 = currentTuple2.getTupleDesc();
                 TupleDesc td = TupleDesc.merge(td1, td2);
                 Tuple t = new Tuple(td);

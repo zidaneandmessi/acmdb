@@ -65,6 +65,8 @@ public class Join extends Operator {
         return TupleDesc.merge(child1.getTupleDesc(), child2.getTupleDesc());
     }
 
+    private Tuple currentTuple1, currentTuple2;
+
     public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
@@ -104,8 +106,6 @@ public class Join extends Operator {
      * @return The next matching tuple.
      * @see JoinPredicate#filter
      */
-    
-    private Tuple currentTuple1, currentTuple2;
 
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
