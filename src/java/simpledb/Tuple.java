@@ -103,28 +103,28 @@ public class Tuple implements Serializable {
 
     public class ArrayIterator<E> implements Iterator<E> {
 
-            public E[] obj;
-            public int len;
-            public int index;
+        public E[] obj;
+        public int len;
+        public int index;
 
-            public ArrayIterator(E[] a) {
-                this.obj = a;
-                this.len = a.length;
-                this.index = 0;
-            }
-
-            public boolean hasNext() {
-                return index < len && obj[index] != null;
-            }
-
-            public E next() {
-                return obj[index++];
-            }
-
-            public void remove() {
-                throw new UnsupportedOperationException();
-            }
+        public ArrayIterator(E[] a) {
+            this.obj = a;
+            this.len = a.length;
+            this.index = 0;
         }
+
+        public boolean hasNext() {
+            return index < len && obj[index] != null;
+        }
+
+        public E next() {
+            return obj[index++];
+        }
+
+        public void remove() {
+            throw new UnsupportedOperationException();
+        }
+    }
 
     /**
      * @return

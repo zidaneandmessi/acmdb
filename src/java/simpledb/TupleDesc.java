@@ -35,6 +35,34 @@ public class TupleDesc implements Serializable {
         }
     }
 
+    
+    private TDItem[] tdAr;
+
+    public class ArrayIterator<E> implements Iterator<E> {
+
+        public E[] obj;
+        public int len;
+        public int index;
+
+        public ArrayIterator(E[] a) {
+            this.obj = a;
+            this.len = a.length;
+            this.index = 0;
+        }
+
+        public boolean hasNext() {
+            return index < len && obj[index] != null;
+        }
+
+        public E next() {
+            return obj[index++];
+        }
+
+        public void remove() {
+            throw new UnsupportedOperationException();
+        }
+    }
+
     /**
      * @return
      *        An iterator which iterates over all the field TDItems
@@ -42,13 +70,10 @@ public class TupleDesc implements Serializable {
      * */
     public Iterator<TDItem> iterator() {
         // some code goes here
-        return null;
+        return new ArrayIterator<TDItem>(tdAr);
     }
 
     private static final long serialVersionUID = 1L;
-    
-    private TDItem[] tdAr;
-
     /**
      * Create a new TupleDesc with typeAr.length fields with fields of the
      * specified types, with associated named fields.
