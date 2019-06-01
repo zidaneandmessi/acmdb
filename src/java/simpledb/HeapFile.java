@@ -149,9 +149,9 @@ public class HeapFile implements DbFile {
         }
         
         public void open() {
-            pageCnt = 0;
+            this.pageCnt = 0;
             try {
-                page = (HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), pageCnt++), Permissions.READ_WRITE);
+                page = (HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), pageCnt++), Permissions.READ_ONLY);
             } catch(TransactionAbortedException e) {
                 e.printStackTrace();
             } catch(DbException e) {
@@ -161,12 +161,12 @@ public class HeapFile implements DbFile {
         }
 
         public boolean hasNext() {
-            if (page == null || it == null || pageCnt > numPages())
+            if (page == null || it == null)
                 return false;
             if (!it.hasNext()) {
                 try {
                     for (int i = pageCnt; i < numPages(); i++)
-                        if (((HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), i), Permissions.READ_WRITE)).iterator().hasNext())
+                        if (((HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), i), Permissions.READ_ONLY)).iterator().hasNext())
                             return true;
                 } catch(TransactionAbortedException e) {
                     e.printStackTrace();
@@ -179,11 +179,11 @@ public class HeapFile implements DbFile {
         }
 
         public Tuple next() {
-            if (!hasNext()) 
+            if (!hasNext())
                 throw new NoSuchElementException();
             while (hasNext() && !it.hasNext()) {
                 try {
-                    page = (HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), pageCnt++), Permissions.READ_WRITE);
+                    page = (HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), pageCnt++), Permissions.READ_ONLY);
                 } catch(TransactionAbortedException e) {
                     e.printStackTrace();
                 } catch(DbException e) {
@@ -195,9 +195,9 @@ public class HeapFile implements DbFile {
         }
 
         public void rewind() {
-            pageCnt = 0;
+            this.pageCnt = 0;
             try {
-                page = (HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), pageCnt++), Permissions.READ_WRITE);
+                page = (HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), pageCnt++), Permissions.READ_ONLY);
             } catch(TransactionAbortedException e) {
                 e.printStackTrace();
             } catch(DbException e) {
@@ -207,8 +207,9 @@ public class HeapFile implements DbFile {
         }
 
         public void close() {
-            pageCnt = 0;
-            page = null;
+            this.pageCnt = 0;
+            this.page = null;
+            this.it = null;
         }
     }
 

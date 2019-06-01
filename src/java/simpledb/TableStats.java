@@ -8,8 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * TableStats represents statistics (e.g., histograms) about base tables in a
- * query. 
- * 
+ * query.
+ *
  * This class is not needed in implementing lab1, lab2 and lab3.
  */
 public class TableStats {
@@ -25,7 +25,7 @@ public class TableStats {
     public static void setTableStats(String tablename, TableStats stats) {
         statsMap.put(tablename, stats);
     }
-    
+
     public static void setStatsMap(HashMap<String,TableStats> s)
     {
         try {
@@ -79,7 +79,7 @@ public class TableStats {
     /**
      * Create a new TableStats object, that keeps track of statistics on each
      * column of a table
-     * 
+     *
      * @param tableid
      *            The table over which to compute statistics
      * @param ioCostPerPage
@@ -107,8 +107,8 @@ public class TableStats {
         for (int i = 0; i < numFields; i++) {
             if (td.getFieldType(i) == Type.INT_TYPE) {
                 histogramTypes[i] = HistogramType.INT_HISTOGRAM;
-                intMin[i] = 2147483647;
-                intMax[i] = -2147483648;
+                intMin[i] = Integer.MAX_VALUE;
+                intMax[i] = Integer.MIN_VALUE;
             }
             else {
                 histogramTypes[i] = HistogramType.STRING_HISTOGRAM;
@@ -171,12 +171,12 @@ public class TableStats {
      * Estimates the cost of sequentially scanning the file, given that the cost
      * to read a page is costPerPageIO. You can assume that there are no seeks
      * and that no pages are in the buffer pool.
-     * 
+     *
      * Also, assume that your hard drive can only read entire pages at once, so
      * if the last page of the table only has one tuple on it, it's just as
      * expensive to read as a full page. (Most real hard drives can't
      * efficiently address regions smaller than a page at a time.)
-     * 
+     *
      * @return The estimated cost of scanning the table.
      */
     public double estimateScanCost() {
@@ -190,7 +190,7 @@ public class TableStats {
     /**
      * This method returns the number of tuples in the relation, given that a
      * predicate with selectivity selectivityFactor is applied.
-     * 
+     *
      * @param selectivityFactor
      *            The selectivity of any predicates over the table
      * @return The estimated cardinality of the scan with the specified
@@ -219,7 +219,7 @@ public class TableStats {
     /**
      * Estimate the selectivity of predicate <tt>field op constant</tt> on the
      * table.
-     * 
+     *
      * @param field
      *            The field over which the predicate ranges
      * @param op
