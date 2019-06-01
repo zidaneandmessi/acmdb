@@ -161,7 +161,7 @@ public class HeapFile implements DbFile {
         }
 
         public boolean hasNext() {
-            if (page == null || it == null || pageCnt > numPages() || pageCnt == numPages() && !it.hasNext())
+            if (page == null || it == null || pageCnt > numPages())
                 return false;
             if (!it.hasNext()) {
                 try {

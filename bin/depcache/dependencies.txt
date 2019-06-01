@@ -118,8 +118,8 @@ java.util.NoSuchElementException
 java.util.Iterator
 simpledb.HeapFile
 simpledb.Database
-simpledb.BufferPool
 simpledb.TransactionAbortedException
+simpledb.BufferPool
 java.lang.Object
 simpledb.HeapFile$HeapFileIterator
 simpledb.HeapPage
@@ -891,8 +891,8 @@ java.io.PrintStream
 [Lsimpledb.Type;
 java.util.NoSuchElementException
 java.io.BufferedReader
-java.io.IOException
 [Ljava.lang.String;
+java.io.IOException
 simpledb.Catalog$Table
 simpledb.HeapFile
 java.util.concurrent.ConcurrentHashMap$KeySetView
