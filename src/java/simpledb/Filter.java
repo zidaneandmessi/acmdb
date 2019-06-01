@@ -77,13 +77,14 @@ public class Filter extends Operator {
     @Override
     public DbIterator[] getChildren() {
         // some code goes here
-        DbIterator[] a;
-        return null;
+        DbIterator[] children = new DbIterator[]{child};
+        return children;
     }
 
     @Override
     public void setChildren(DbIterator[] children) {
         // some code goes here
+        this.child = children[0];
     }
 
 }
