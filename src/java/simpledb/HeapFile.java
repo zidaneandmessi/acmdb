@@ -148,19 +148,17 @@ public class HeapFile implements DbFile {
             this.tid = tid;
         }
         
-        public void open() {
+        public void open() throws DbException {
             this.pageCnt = 0;
             try {
                 page = (HeapPage)Database.getBufferPool().getPage(tid, new HeapPageId(getId(), pageCnt++), Permissions.READ_ONLY);
             } catch(TransactionAbortedException e) {
                 e.printStackTrace();
-            } catch(DbException e) {
-                e.printStackTrace();
             }
             it = page.iterator();
         }
 
-        public boolean hasNext() {
+        public boolean hasNext() throws DbException {
             if (page == null || it == null)
                 return false;
             if (!it.hasNext()) {
@@ -170,15 +168,13 @@ public class HeapFile implements DbFile {
                             return true;
                 } catch(TransactionAbortedException e) {
                     e.printStackTrace();
-                } catch(DbException e) {
-                    e.printStackTrace();
                 }
                 return false;
             }
             return true;
         }
 
-        public Tuple next() {
+        public Tuple next() throws DbException {
             if (!hasNext())
                 throw new NoSuchElementException();
             while (hasNext() && !it.hasNext()) {
