@@ -137,13 +137,12 @@ public class BufferPool {
         private ConcurrentHashMap<PageId, Lock> pageLockTable; // Locks on a page
         private ConcurrentHashMap<TransactionId, Vector<PageId>> dirtyPagesTable; // Pages dirtied by tid
         private ConcurrentHashMap<Integer, AtomicInteger> pidObjectTable;
-        private ConcurrentHashMap<TransactionId, Vector<TransactionId>> tidDepGraph;
 
         public Locker() {
             pageLockTable = new ConcurrentHashMap<PageId, Lock>();
             dirtyPagesTable = new ConcurrentHashMap<TransactionId, Vector<PageId>>();
             pidObjectTable = new ConcurrentHashMap<Integer, AtomicInteger>();
-            tidDepGraph = new ConcurrentHashMap<TransactionId, Vector<TransactionId>>();
+            deadlockDetector = new DeadlockDetector();
         }
 
         public AtomicInteger getPidObject(int x) {
@@ -189,8 +188,8 @@ public class BufferPool {
                     Iterator<TransactionId> it = lock.tids.iterator();
                     TransactionId depTid = it.next();
                     if (!tid.equals(depTid))
-                        addEdge(tid, depTid);
-                    if (hasDeadLock())
+                        deadlockDetector.addEdge(tid, depTid);
+                    if (deadlockDetector.hasDeadLock(tid))
                         throw new TransactionAbortedException();
                     try {
                         getPidObject(pid.hashCode()).wait();
@@ -233,17 +232,17 @@ public class BufferPool {
                         while (it.hasNext()) {
                             TransactionId depTid = it.next();
                             if (!tid.equals(depTid))
-                                addEdge(tid, depTid);
+                                deadlockDetector.addEdge(tid, depTid);
                         }
-                        if (hasDeadLock())
+                        if (deadlockDetector.hasDeadLock(tid))
                             throw new TransactionAbortedException();
                     }
                     else {
                         Iterator<TransactionId> it = lock.tids.iterator();
                         TransactionId depTid = it.next();
                         if (!tid.equals(depTid))
-                            addEdge(tid, depTid);
-                        if (hasDeadLock())
+                            deadlockDetector.addEdge(tid, depTid);
+                        if (deadlockDetector.hasDeadLock(tid))
                             throw new TransactionAbortedException();
                     }
                     try {
@@ -253,84 +252,114 @@ public class BufferPool {
             }
         }
 
-        private ConcurrentHashMap<TransactionId, Integer> dfn;
-        private ConcurrentHashMap<TransactionId, Integer> low;
-        private ConcurrentHashMap<TransactionId, Integer> fresh;
-        private ConcurrentHashMap<TransactionId, Boolean> inStack;
-        private int tot;
-        private Stack<TransactionId> stack;
-        private boolean deadLockFound;
 
-        private void tarjan(TransactionId tid) {
-            if (deadLockFound || !tidDepGraph.containsKey(tid))
-                return;
-            tot++;
-            dfn.put(tid, tot);
-            low.put(tid, tot);
-            stack.push(tid);
-            inStack.put(tid, true);
-            Vector<TransactionId> tidSet = tidDepGraph.get(tid);
-            Iterator<TransactionId> it = tidSet.iterator();
-            while (it.hasNext()) {
-                TransactionId nextTid = it.next();
-                if (!dfn.containsKey(nextTid) || dfn.get(nextTid) == 0) {
-                    tarjan(nextTid);
-                    if (deadLockFound) return;
-                    if (!dfn.containsKey(nextTid)) continue;
-                    int tidLow = low.get(tid);
-                    int nxtLow = low.get(nextTid);
-                    if (nxtLow < tidLow)
-                        low.put(tid, nxtLow);
-                }
-                else if (inStack.containsKey(nextTid) && inStack.get(nextTid) == true) {
-                    int tidLow = low.get(tid);
-                    int nxtDfn = dfn.get(nextTid);
-                    if (nxtDfn < tidLow)
-                        low.put(tid, nxtDfn);
-                }
+        public class DeadlockDetector {
+
+            public ConcurrentHashMap<TransactionId, Vector<TransactionId>> tidDepGraph;
+            private ConcurrentHashMap<TransactionId, Integer> dfn;
+            private ConcurrentHashMap<TransactionId, Integer> low;
+            private ConcurrentHashMap<TransactionId, Integer> fresh;
+            private ConcurrentHashMap<TransactionId, Boolean> inStack;
+            private int tot;
+            private Stack<TransactionId> stack;
+            private boolean deadLockFound;
+
+            public DeadlockDetector() {
+                tidDepGraph = new ConcurrentHashMap<TransactionId, Vector<TransactionId>>();
             }
-            if (dfn.get(tid) == low.get(tid)) {
-                if (stack.pop() != tid) {
-                    deadLockFound = true;
+
+            private void tarjan(TransactionId tid) {
+                if (deadLockFound || !tidDepGraph.containsKey(tid))
                     return;
+                tot++;
+                dfn.put(tid, tot);
+                low.put(tid, tot);
+                stack.push(tid);
+                inStack.put(tid, true);
+                Vector<TransactionId> tidSet = tidDepGraph.get(tid);
+                Iterator<TransactionId> it = tidSet.iterator();
+                while (it.hasNext()) {
+                    TransactionId nextTid = it.next();
+                    if (!dfn.containsKey(nextTid) || dfn.get(nextTid) == 0) {
+                        tarjan(nextTid);
+                        if (deadLockFound) return;
+                        if (!dfn.containsKey(nextTid)) continue;
+                        int tidLow = low.get(tid);
+                        int nxtLow = low.get(nextTid);
+                        if (nxtLow < tidLow)
+                            low.put(tid, nxtLow);
+                    }
+                    else if (inStack.containsKey(nextTid) && inStack.get(nextTid) == true) {
+                        int tidLow = low.get(tid);
+                        int nxtDfn = dfn.get(nextTid);
+                        if (nxtDfn < tidLow)
+                            low.put(tid, nxtDfn);
+                    }
                 }
-                inStack.put(tid, false);
+                if (dfn.get(tid) == low.get(tid)) {
+                    if (stack.pop() != tid) {
+                        deadLockFound = true;
+                        return;
+                    }
+                    inStack.put(tid, false);
+                }
+            }
+
+            public synchronized boolean hasDeadLock(TransactionId stTid) {
+                /*dfn = new ConcurrentHashMap<TransactionId, Integer>();
+                low = new ConcurrentHashMap<TransactionId, Integer>();
+                fresh = new ConcurrentHashMap<TransactionId, Integer>();
+                inStack = new ConcurrentHashMap<TransactionId, Boolean>();
+                tot = 0;
+                stack = new Stack<TransactionId>();
+                deadLockFound = false;
+                for (TransactionId tid : tidDepGraph.keySet())
+                    if (!dfn.containsKey(tid)) {
+                        tarjan(tid);
+                        if (deadLockFound)
+                            return true;
+                    }
+                return false;*/
+                Queue<TransactionId> q = new LinkedList<>();
+                HashSet<TransactionId> used = new HashSet<>();
+                q.add(stTid);
+                while (!q.isEmpty()) {
+                    TransactionId tid = q.poll();
+                    if (tidDepGraph.containsKey(tid)) {
+                        Vector<TransactionId> tids = tidDepGraph.get(tid);
+                        Iterator<TransactionId> it = tids.iterator();
+                        while(it.hasNext()) {
+                            TransactionId nxtTid = it.next();
+                            if (nxtTid.equals(stTid))
+                                return true;
+                            if (used.contains(nxtTid))
+                                continue;
+                            q.add(nxtTid);
+                            used.add(nxtTid);
+                        }
+                    }
+                }
+                return false;
+            }
+            public synchronized void addEdge(TransactionId tid1, TransactionId tid2) {
+                Vector<TransactionId> tidSet;
+                if (!tidDepGraph.containsKey(tid1)) 
+                    tidSet = new Vector<TransactionId>();
+                else
+                    tidSet = tidDepGraph.get(tid1);
+                if (!tidSet.contains(tid2))
+                    tidSet.add(tid2);
+                tidDepGraph.put(tid1, tidSet);
+            }
+
+            public synchronized void removeEdge(TransactionId tid) {
+                tidDepGraph.remove(tid);
+                for (Vector<TransactionId> tidSet : tidDepGraph.values())
+                    tidSet.remove(tid);
             }
         }
 
-        public synchronized boolean hasDeadLock() {
-            dfn = new ConcurrentHashMap<TransactionId, Integer>();
-            low = new ConcurrentHashMap<TransactionId, Integer>();
-            fresh = new ConcurrentHashMap<TransactionId, Integer>();
-            inStack = new ConcurrentHashMap<TransactionId, Boolean>();
-            tot = 0;
-            stack = new Stack<TransactionId>();
-            deadLockFound = false;
-            for (TransactionId tid : tidDepGraph.keySet())
-                if (!dfn.containsKey(tid)) {
-                    tarjan(tid);
-                    if (deadLockFound)
-                        return true;
-                }
-            return false;
-        }
-
-        public synchronized void addEdge(TransactionId tid1, TransactionId tid2) {
-            Vector<TransactionId> tidSet;
-            if (!tidDepGraph.containsKey(tid1)) 
-                tidSet = new Vector<TransactionId>();
-            else
-                tidSet = tidDepGraph.get(tid1);
-            if (!tidSet.contains(tid2))
-                tidSet.add(tid2);
-            tidDepGraph.put(tid1, tidSet);
-        }
-
-        public synchronized void removeEdge(TransactionId tid) {
-            tidDepGraph.remove(tid);
-            for (Vector<TransactionId> tidSet : tidDepGraph.values())
-                tidSet.remove(tid);
-        }
+        private DeadlockDetector deadlockDetector;
 
         public void releaseLock(TransactionId tid) {
             if (!dirtyPagesTable.containsKey(tid))
@@ -351,7 +380,7 @@ public class BufferPool {
                     getPidObject(pid.hashCode()).notify();
                 }
             }
-            removeEdge(tid);
+            deadlockDetector.removeEdge(tid);
             dirtyPagesTable.remove(tid);
         }
 
